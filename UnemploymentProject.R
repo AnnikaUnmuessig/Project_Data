@@ -9,6 +9,7 @@ library(RColorBrewer)
 
 map <- getMap()
 plot(map)
+map$NAME
 
 #Source: Multiple sources compiled by World Bank (2024) – processed by Our World in Data
 #https://ourworldindata.org/grapher/unemployment-rate?tab=chart#sources-and-processing
@@ -101,7 +102,7 @@ ggplot(income, aes(x = Year, y = Unemployment_Rate, color = Country)) +
 #extract region that has biggest unemployment rate
 
 #Country with highest unemployment then (1991) and now (2022)
-highest_1991 <- world_data %>%
+highest_1991 <- world_data%>% filter(Country != "Montenegro") %>%
   filter(Year == 1991) %>%
   slice(order(Unemployment_Rate)) %>%
   tail(1) %>%
@@ -247,7 +248,7 @@ png_files <- list.files(temp_dir, pattern = "frame_.*\\.png$", full.names = TRUE
 # Create GIF
 animation <- image_read(png_files) %>%
   image_animate(fps = 1) %>%
-  image_write("unemployment_animation_w.gif")
+  image_write("unemployment_animation_world.gif")
 
 
 #Europe
@@ -277,16 +278,16 @@ for (year in years) {
 png_files <- list.files(temp_dir, pattern = "frame_.*\\.png$", full.names = TRUE)
 
 # Create GIF
-animation <- image_read(png_files) %>%
+animation2 <- image_read(png_files) %>%
   image_animate(fps = 1) %>%
-  image_write("unemployment_animation.gif")
+  image_write("unemployment_animation_europe.gif")
 
 #Take a look at several different countries, any year that has played a significant role for unemployment
 #maybe some crisis? Hypothesis
 
 #Italy vs other european countries
 ggplot(world_data%>%
-         filter(Country %in% c("Germany", "Spain","Sweden","Albania", "Italy")), aes(x = Year, y = Unemployment_Rate, color = Country)) +
+         filter(Country %in% c("Germany","Sweden","Greece", "Italy")), aes(x = Year, y = Unemployment_Rate, color = Country)) +
   geom_line() +
   labs(title = "Unemployment Rate Over Time of other European countries in comparison with Italy",
        x = "Year",
@@ -504,13 +505,12 @@ world_data <- world_data %>%
 
 #For a specific country we plot the changes
 c_data <- world_data %>%
-  filter(Country == "Algeria")
+  filter(Country == "Switzerland")
 
-# Plot GDP and Unemployment Rate Change Percentages in the same plot
 ggplot(c_data, aes(x = Year)) +
   geom_line(aes(y = GDP_Change_Percent, color = "GDP Change"), size = 1.2) +
   geom_line(aes(y = Unemployment_Rate_Change_Percent, color = "Unemployment Rate Change"), linetype = "dashed", size = 1.2) +
-  labs(title = "Annual Percentage Change in GDP and Unemployment Rate",
+  labs(title = paste("Change in GDP and Unemployment Rate in", unique(c_data$Country)),
        x = "Year",
        y = "Change (%)",
        color = "Variable") +
@@ -521,12 +521,51 @@ ggplot(c_data, aes(x = Year)) +
 #Correlations
 # Filter out rows with missing values in GDP or Unemployment Rate
 clean_data <- world_data %>%
-  filter(complete.cases(GDP, Unemployment_Rate))
+  filter(complete.cases(GDP_Change_Percent, Unemployment_Rate_Change_Percent))
 
 # Calculate correlation matrix
 correlation_matrix <- clean_data %>%
   group_by(Country) %>%
-  summarise(correlation = cor(GDP, Unemployment_Rate))
+  summarise(correlation = cor(GDP_Change_Percent, Unemployment_Rate_Change_Percent))
 
 # View correlation matrix
 print(correlation_matrix)
+
+
+colorPalette <- c(
+  colorRampPalette(c("blue", "white"))(50),  # From violet to white for negative correlations
+  colorRampPalette(c("white", "red"))(50)      # From white to red for positive correlations
+)
+merged_data_cor <- joinCountryData2Map(correlation_matrix, joinCode = "NAME", nameJoinColumn = "Country")
+print(merged_data_cor)  
+
+# Plot the map
+map_plot <- mapCountryData(
+  merged_data_cor,
+  nameColumnToPlot = "correlation",
+  catMethod = "fixedWidth",
+  mapRegion = "world",
+  mapTitle = "Correlation Intensity: Change in GDP, Unemployment Rate",
+  colourPalette = colorPalette,
+  oceanCol = "lightblue",
+  missingCountryCol = "white",
+  addLegend = FALSE  # Disable automatic legend
+)
+
+breaks <- seq(-1, 1, length.out = 101)  # Ensure there are one more break than the number of colors
+labels <- as.character(seq(-1, 1, by = 0.2))
+
+# Add custom legend using addMapLegendBoxes
+addMapLegend(
+  plot=TRUE,
+  legendLabels="all",
+  legendMar=3,
+  legendShrink=0.9,
+  legendWidth=1.2,
+  horizontal=TRUE,
+  legendArgs = FALSE,
+  labelFontSize=0.7,
+  colourVector=colorPalette,
+  cutVector=breaks
+)
+
